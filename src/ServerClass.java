@@ -5,19 +5,33 @@ import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class ServerClass implements Runnable {
 
     private ArrayList<ConnectionHnadler> connections;
+    private ServerSocket server;
+    private boolean done;
+    private ExecutorService pool;
+
+    public ServerClass() {
+        connections = new ArrayList<>();
+        done = false;
+    }
 
 
     @Override
     public void run() {
         try {
-            ServerSocket server = new ServerSocket(9999);
-            Socket client = server.accept();
-            ConnectionHnadler Handler = new ConnectionHnadler(client)
-            connections.add(Handler)
+            server = new ServerSocket(9999);
+            pool = Executors.newCachedThreadPool();
+            while(!done) {
+                Socket client = server.accept();
+                ConnectionHnadler Handler = new ConnectionHnadler(client);
+                connections.add(Handler);
+                pool.execute(Handler);
+            }
         } catch (IOException e) {
             // TODO: handle
         }
@@ -30,6 +44,20 @@ public class ServerClass implements Runnable {
             }
         }
     }
+
+    public void shutdown(){
+        try {
+        done = true;
+        if(!server.isClosed()) {
+            server.close();
+        }
+        for (ConnectionHnadler ch : connections){
+            ch.shutdown();
+        }
+        }catch (IOException e) {
+            shutdown();
+        }
+        }
 
     class ConnectionHnadler implements Runnable {
 
@@ -64,7 +92,8 @@ public class ServerClass implements Runnable {
                             out.println("Pas de pseudo renseigné.");
                         }
                     }else if (message.startsWith("!quit ")) {
-                        //TODO : quit
+                        broadcast(pseudo + "s'est envolé !");
+                        shutdown();
                     }else {
                         broadcast(pseudo + ": " + message);
                     }
@@ -78,5 +107,22 @@ public class ServerClass implements Runnable {
         public void sendMessage(String message) {
             out.println(message);
         }
+
+        public void shutdown() {
+            try {
+                in.close();
+                out.close();
+                if (!client.isClosed()) {
+                    client.close();
+                }
+            } catch (IOException e) {
+                shutdown();
+            }
+        }
+    }
+
+    public static void main(String[] args) {
+        ServerClass server = new ServerClass();
+        server.run();
     }
 }
